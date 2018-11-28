@@ -19,34 +19,27 @@ private:
 
   ros::NodeHandle nhimu;
   ros::NodeHandle nhorb;
-  ros::Subscriber imu_sub,orb_sub;
-  ros::Publisher imupos_pub;
+  ros::Subscriber imu_sub, orb_sub;
+  ros::Publisher imupos_pub, fusion_pub;
 
 public:
 
   Imuposeinf();
   void imuCallback(const sensor_msgs::ImuConstPtr & msg);
-  void AccumulateIMUShift(void);
   void orbCallback(const nav_msgs::Odometry::ConstPtr& msg);
-  void InsCalculation(const double delta_t);
+  nav_msgs::Odometry fusionPath;
+  nav_msgs::Odometry imuPath;
+
   Eigen::Matrix<double,3,3> Qua2Dcm(const Eigen::Quaternion<double> q);
   Eigen::Quaternion<double> Dcm2Qua(const Eigen::Matrix<double,3,3> dcm);
 
   Eigen::Matrix<double,3,1> mAdd_w;         // 对准时累加 加速度
   Eigen::Matrix<double,3,1> mAdd_a;         // 对准时累加 线加速度
 
-  Eigen::Matrix<double,3,1> mAdd_mag;
-
   ImuState mImuInf_cur;                     // 当前状态值
   ImuState mImuInf_pre;                     // 上一状态值
-  double mTimeCount;                        // 60秒计时
   bool mIMUOriCount;                        // IMU时间flag
-  bool morbflag;                            // IMU时间flag
-  bool mAlignOK;                            // 对准是否搞定 true搞定了
-
-  double mOmegaEarth;                       //地球半径
-  double mLongitude;                        //径度
-  double mLatitude;                         //纬度
+  bool morbflag;                            // orb时间flag
 
   double delta_T;
   double curorb_T;
@@ -102,6 +95,7 @@ public:
   Eigen::Quaternion<double> q_e;                  //姿态误差过渡量
   Eigen::Matrix<double,3,1> q_error;
   Eigen::Matrix<double,3,1> p_ci;                 //相机与IMU之间的位置标定
+  Eigen::Quaternion<double> q_ci;                 //相机与IMU之间的姿态标定
   Eigen::Matrix<double,6,1> z_k;
   Eigen::Matrix<double,6,15> H_k;
 

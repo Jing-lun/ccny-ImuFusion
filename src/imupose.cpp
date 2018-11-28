@@ -10,11 +10,12 @@ Imuposeinf::Imuposeinf()
     //变量初始化
     mAdd_w << 0,0,0;
     mAdd_a << 0,0,0;
-    mTimeCount = 0.0;
     mIMUOriCount = false;
+
     gn << 0, 0, -9.7919;
     ba << 0.01, 0.01, 0.01;
     bw << 0.0016, 0.0013, 0.0024;//0.0016, 0.0013, 0.0024
+
     q_pre.w() = 1.0;
     q_pre.x() = 0.0;
     q_pre.y() = 0.0;
@@ -25,25 +26,25 @@ Imuposeinf::Imuposeinf()
     q_now.x() = 0.0;
     q_now.y() = 0.0;
     q_now.z() = 0.0;
+
     V_pre << 0, 0, 0;
     V_now << 0, 0, 0;
     P_pre << 0, 0, 0;
     P_now << 0, 0, 0;
 
-    q_pre.w() = 1.0;
-    q_pre.x() = 0.0;
-    q_pre.y() = 0.0;
-    q_pre.z() = 0.0;
-
     n_a << 0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01;
     n_ba << 0.001, 0, 0, 0, 0.001, 0, 0, 0, 0.001;
     n_w << 0.001, 0, 0, 0, 0.001, 0, 0, 0, 0.001;
     n_bw << 0.001, 0, 0, 0, 0.001, 0, 0, 0, 0.001;
+
     p_ci << 0, 0, 0.08;
+    q_ci.w() = 1.0;
+    q_ci.x() = 0.0;
+    q_ci.y() = 0.0;
+    q_ci.z() = 0.0;
     Rk << 0.01,0,0,0,0,0, 0,0.01,0,0,0,0, 0,0,0.01,0,0,0, 0,0,0,0.01,0,0, 0,0,0,0,0.01,0, 0,0,0,0,0,0.01;
     Xkpre.setZero();
     Kk.setZero();
-    mAlignOK = false;
     Pkpre << 0.01,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0.01,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0.01,0,0,0,0,0,0,0,0,0,0,0,0,
              0,0,0,0.0001,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0.0001,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0.0001,0,0,0,0,0,0,0,0,0,
              0,0,0,0,0,0,0.01,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0.01,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0.01,0,0,0,0,0,0,
@@ -52,7 +53,8 @@ Imuposeinf::Imuposeinf()
 
     imu_sub = nhimu.subscribe<sensor_msgs::Imu>("/imu/data", 50, &Imuposeinf::imuCallback, this);
     orb_sub = nhorb.subscribe<nav_msgs::Odometry>("/orbslam/path", 2, &Imuposeinf::orbCallback, this);
-    imupos_pub = nhimu.advertise<sensor_msgs::PointCloud2>("imu/Pose", 50);
+    imupos_pub = nhimu.advertise<nav_msgs::Odometry>("imu/path", 50);
+    fusion_pub = nhorb.advertise<nav_msgs::Odometry>("fusion/path" ,50);
 
 }
 
@@ -80,40 +82,6 @@ Eigen::Quaternion<double> Imuposeinf::Dcm2Qua(const Eigen::Matrix<double,3,3> dc
     q.z() = (dcm(1,0) - dcm(0,1))/(4*q.w());
     return q;
 }
-
-#if 0
-void Imuposeinf::AccumulateIMUShift()
-{
-  float accx = accX;
-  float accy= accY;
-  float accz = accZ;
-
-  float x1 = cos(roll) * accx - sin(roll) * accy;
-  float y1 = sin(roll) * accx + cos(roll) * accy;
-  float z1 = accz;
-
-  float x2 = x1;
-  float y2 = cos(pitch) * y1 - sin(pitch) * z1;
-  float z2 = sin(pitch) * y1 + cos(pitch) * z1;
-
-  accx = cos(yaw) * x2 + sin(yaw) * z2;
-  accy = y2;
-  accz = -sin(yaw) * x2 + cos(yaw) * z2;
-  if (delta_T < 0.1) {
-
-    mImuInf_cur.imuShiftX = mImuInf_pre.imuShiftX + mImuInf_pre.imuVelocityX * delta_T
-                              + accx * delta_T * delta_T / 2;
-    mImuInf_cur.imuShiftY = mImuInf_pre.imuShiftY + mImuInf_pre.imuVelocityY * delta_T
-                              + accy * delta_T * delta_T / 2;
-    mImuInf_cur.imuShiftZ = mImuInf_pre.imuShiftZ + mImuInf_pre.imuVelocityZ * delta_T
-                              + accz * delta_T * delta_T / 2;
-
-    mImuInf_cur.imuVelocityX = mImuInf_pre.imuVelocityX + accx * delta_T;
-    mImuInf_cur.imuVelocityY = mImuInf_pre.imuVelocityY + accy * delta_T;
-    mImuInf_cur.imuVelocityZ = mImuInf_pre.imuVelocityZ + accz * delta_T;
-  }
-}
-#endif
 
 void Imuposeinf::imuCallback(const sensor_msgs::Imu::ConstPtr& imuIn)
 {
@@ -174,13 +142,10 @@ void Imuposeinf::imuCallback(const sensor_msgs::Imu::ConstPtr& imuIn)
 
       d_Vgn = gn * delta_T;
       d_Vrot = 0.5 * skew(deltatheta) * deltav;//d_Vrot过渡量
+      //姿态解算
       V_now = V_pre + d_Vgn + Cbn_pre * (0.5*deltav + d_Vrot);
-
       //位置解算
       P_now = P_pre + (V_now + V_pre)/2*delta_T;
-
-      Cbn_pre = q_now.toRotationMatrix();
-
 
       //更新
       q_pre = q_now;
@@ -188,52 +153,20 @@ void Imuposeinf::imuCallback(const sensor_msgs::Imu::ConstPtr& imuIn)
       P_pre = P_now;
       Cbn_pre = q_pre.toRotationMatrix();
 
-      tf::Quaternion orientation1;    //quaternion为四元数
-      tf::quaternionMsgToTF(imuIn->orientation, orientation1);//将imuIn->orientation赋给orientation,用四元数表示
-      tf::Matrix3x3(orientation1).getRPY(roll1, pitch1, yaw1);//get the matrix represented as roll pitch and yaw about fixed axes XYZ.
-      //相对当地水平地理坐标系
-
-      accX = imuIn->linear_acceleration.y - sin(roll) * cos(pitch) * 9.7919;//机器人在各个方向的线性加速度应该减去重力加速度的投影
-      accY = imuIn->linear_acceleration.z - cos(roll) * cos(pitch) * 9.7919;
-      accZ = imuIn->linear_acceleration.x + sin(pitch) * 9.7919;//9.81为重力加速度g
-    //积分
-//      accX = imuIn->linear_acceleration.y - sin(roll1) * cos(pitch1) * 9.7919;//机器人在各个方向的线性加速度应该减去重力加速度的投影
-//      accY = imuIn->linear_acceleration.z - cos(roll1) * cos(pitch1) * 9.7919;
-//      accZ = imuIn->linear_acceleration.x + sin(pitch1) * 9.7919;//9.81为重力加速度g
-      //imu
-
-      //AccumulateIMUShift();
-
       mImuInf_cur.mPos = P_pre;
       mImuInf_cur.mQua = q_pre;
       mImuInf_pre = mImuInf_cur;
-
-      //AccumulateIMUShift();
-
-      pcl::PointCloud<pcl::PointXYZ> imuTrans(4, 1);
-      imuTrans.points[0].x=roll;
-      imuTrans.points[0].y=pitch;
-      imuTrans.points[0].z=yaw;
-      imuTrans.points[1].x=accX;
-      imuTrans.points[1].y=accY;
-      imuTrans.points[1].z=accZ;
-      imuTrans.points[2].x=mImuInf_cur.imuShiftX;
-      imuTrans.points[2].y=mImuInf_cur.imuShiftY;
-      imuTrans.points[2].z=mImuInf_cur.imuShiftZ;
-//      imuTrans.points[2].x=P_now[0];
-//      imuTrans.points[2].y=P_now[1];
-//      imuTrans.points[2].z=P_now[2];
-      imuTrans.points[3].x=mImuInf_cur.imuVelocityX;
-      imuTrans.points[3].y=mImuInf_cur.imuVelocityY;
-      imuTrans.points[3].z=mImuInf_cur.imuVelocityZ;
-//      imuTrans.points[3].x=V_now[0];
-//      imuTrans.points[3].y=V_now[1];
-//      imuTrans.points[3].z=V_now[2];
-      sensor_msgs::PointCloud2 imuTransMsg;
-      pcl::toROSMsg(imuTrans, imuTransMsg);
-      imuTransMsg.header.stamp = imuIn->header.stamp;
-      imuTransMsg.header.frame_id = "/camera";
-      imupos_pub.publish(imuTransMsg);
+      
+      imuPath.header.stamp = imuIn->header.stamp;
+      imuPath.header.frame_id = "/calculateIMU";
+      imuPath.pose.pose.orientation.x = q_pre.x();
+      imuPath.pose.pose.orientation.y = q_pre.y();
+      imuPath.pose.pose.orientation.z = q_pre.z();
+      imuPath.pose.pose.orientation.w = q_pre.w();
+      imuPath.pose.pose.position.x = P_pre.x();
+      imuPath.pose.pose.position.y = P_pre.y();
+      imuPath.pose.pose.position.z = P_pre.z();
+      imupos_pub.publish(imuPath);
 }
 
 void Imuposeinf::orbCallback(const nav_msgs::Odometry::ConstPtr& msg)
@@ -248,7 +181,7 @@ void Imuposeinf::orbCallback(const nav_msgs::Odometry::ConstPtr& msg)
     dorb_T = curorb_T - preorb_T;
     if(morbflag == false)
     {
-        dorb_T = 0.2;
+        dorb_T = 0.03;
         morbflag =true;
         P_now << 0,0,0;
     }
@@ -307,8 +240,10 @@ void Imuposeinf::orbCallback(const nav_msgs::Odometry::ConstPtr& msg)
     Q_d.block<3, 3> (12, 6) = -Accxx * Cnb_pre * n_bw * ttt/6;
     Q_d.block<3, 3> (12, 12) = n_bw * dorb_T;
 
-    p_error = p_orb - P_now - Cbn_pre * p_ci;
-    q_e = q_now.conjugate() * q_orb;
+    // Z_p = P_w_c = P_w_i + C_w_i * P_i_c
+    // Z_q : https://github.com/ethz-asl/ethzasl_sensor_fusion/blob/master/ssf_updates/src/pose_sensor.cpp
+    p_error = p_orb - P_now - Cnb_pre * p_ci;
+    q_e = (q_now * q_ci).conjugate() * q_orb;
     q_error = q_e.vec()/q_e.w()*2;
     z_k << p_error, q_error;
 
@@ -344,6 +279,17 @@ void Imuposeinf::orbCallback(const nav_msgs::Odometry::ConstPtr& msg)
     mImuInf_cur.mPos = P_pre;
     mImuInf_cur.mQua = q_pre;
     mImuInf_pre = mImuInf_cur;
+
+    fusionPath.header.stamp = msg->header.stamp;
+    fusionPath.header.frame_id = "/calculateFusion";
+    fusionPath.pose.pose.orientation.x = q_pre.x();
+    fusionPath.pose.pose.orientation.y = q_pre.y();
+    fusionPath.pose.pose.orientation.z = q_pre.z();
+    fusionPath.pose.pose.orientation.w = q_pre.w();
+    fusionPath.pose.pose.position.x = P_pre.x();
+    fusionPath.pose.pose.position.y = P_pre.y();
+    fusionPath.pose.pose.position.z = P_pre.z();
+    fusion_pub.publish(fusionPath);
 
     preorb_T = curorb_T;
 }
