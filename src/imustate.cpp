@@ -14,10 +14,4 @@ ImuState::ImuState()
     mba << 0,0,0;
     mImu_a =g;
     mTime = 0;
-    imuShiftX=0;
-    imuShiftY=0;
-    imuShiftZ=0;
-    imuVelocityX=0;
-    imuVelocityY=0;
-    imuVelocityZ=0;
 }

@@ -9,10 +9,8 @@ public:
     ImuState();
 
     Eigen::Matrix<double,3,1> mImu_w;         // IMU的角速度，测量值
-    Eigen::Matrix<double,3,1> mImu_a;         // MU的线加速度，测量值
-    Eigen::Quaternion<double> mImu_ori;         // MU的角度，测量值
-
-    Eigen::Matrix<double,3,1> mMag;
+    Eigen::Matrix<double,3,1> mImu_a;         // IMU的线加速度，测量值
+    Eigen::Quaternion<double> mImu_ori;       // IMU的角度，测量值
 
     Eigen::Matrix<double, 3, 1> mPos;         //解算的位置
     Eigen::Matrix<double, 3, 1> mVel;         //解算的速度
@@ -23,9 +21,6 @@ public:
     Eigen::Matrix<double, 3, 1> g;
 
     double mTime;
-    double imuShiftX,imuShiftY,imuShiftZ;
-    double imuVelocityX,imuVelocityY,imuVelocityZ;
-
 };
 
 template<class Derived>
